@@ -10,6 +10,26 @@
 # Refer to LICENSE for more information
 #
 from argparse import ArgumentParser, Namespace
+from pathlib import Path
+from typing import Any, Final, Protocol, TypeAlias, final
+
+# MyPy does not recognize this during pull requests
+from pdm.cli.commands.base import BaseCommand  # type: ignore
+from pdm.core import Project  # type: ignore
+from pdm.termui import UI  # type: ignore
+
+from .sbom import (
+    ExporterBase,
+    SupportsFileFormat,
+    SupportsFileVersion,
+    ProjectBuilder,
+    Project as SBomProject,
+    ToolInfo,
+    get_exporter,
+)
+from .sbom.tools import create_pdm_info, create_self_info
+
+
 _ConfigMapping: TypeAlias = dict[str, Any]
 
 
@@ -39,3 +59,16 @@ class SBomCommand(BaseCommand):
 
     def handle(self, project: Project, options: Namespace) -> None:
         pass
+        builder: ProjectBuilder = ProjectBuilder(project)
+        sbom: SBomProject = builder.build()
+
+        exporter: ExporterBase = get_exporter(
+            "spdx",
+            sbom,
+            create_self_info(),
+            create_pdm_info(),
+        )
+
+        import sys
+
+        exporter.export(sys.stdout)
