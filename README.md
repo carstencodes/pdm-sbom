@@ -18,7 +18,6 @@ Generate Software Bill of Materials from PDM based projects
 - [ ] Add parser for TROVE classifiers
 - [ ] Add more data to `Project` entity to fill in gaps
 - [ ] Unify implementation for meta data extraction
-- [ ] Wait for SDPX-Tools 0.7.0 to be published on pypi
 
 ## Purpose
 

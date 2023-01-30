@@ -31,8 +31,7 @@ cyclonedx = [
 ]
 spdx = [
     "packageurl-python>=0.10.4",
-    #    "spdx-tools @ git+https://github.com/spdx/tools-python.git@v0.7.0",
-    "spdx-tools @ git+https://github.com/spdx/tools-python.git@v0.7.0",
+    "spdx-tools>=0.7.0",
 ]
 
 [project.entry-points.pdm]
