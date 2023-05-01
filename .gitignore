@@ -3,4 +3,4 @@ __pypackages__/
 **/__pycache__/*
 build/
 dist/
-.pdm.toml
+.pdm-python
