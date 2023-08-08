@@ -57,8 +57,8 @@ class Project(Component):
         init=False,
         hash=False,
     )
-    development_dependencies: list[Component] = field(
-        default_factory=list,
+    development_dependencies: dict[str, list[Component]] = field(
+        default_factory=dict,
         init=False,
         hash=False,
     )
@@ -71,7 +71,8 @@ class Project(Component):
             for group in self.optional_dependencies.values():
                 yield from group
         if include_dev:
-            yield from self.development_dependencies
+            for group in self.development_dependencies.values():
+                yield from group
 
     def recurse_project(
         self,

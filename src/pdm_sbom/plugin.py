@@ -17,6 +17,7 @@ from typing import Any, Final, Protocol, TypeAlias, final
 from pdm.cli.commands.base import BaseCommand  # type: ignore
 from pdm.core import Project  # type: ignore
 from pdm.termui import UI  # type: ignore
+from pdm.exceptions import PdmException  # type: ignore
 
 from .sbom import (
     ExporterBase,
@@ -58,17 +59,17 @@ class SBomCommand(BaseCommand):
         pass
 
     def handle(self, project: Project, options: Namespace) -> None:
-        pass
-        builder: ProjectBuilder = ProjectBuilder(project)
-        sbom: SBomProject = builder.build()
+        try:
+            builder: ProjectBuilder = ProjectBuilder(project)
+            sbom: SBomProject = builder.build()
 
-        exporter: ExporterBase = get_exporter(
-            "spdx",
-            sbom,
-            create_self_info(),
-            create_pdm_info(),
-        )
-
-        import sys
-
-        exporter.export(sys.stdout)
+            exporter: ExporterBase = get_exporter(
+                "spdx",
+                sbom,
+                create_self_info(),
+                create_pdm_info(),
+            )
+            import sys
+            exporter.export(sys.stdout)
+        except PdmException as pde:
+            raise SystemExit(2) from pde

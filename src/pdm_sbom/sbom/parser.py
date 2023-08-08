@@ -10,7 +10,8 @@
 # Refer to LICENSE for more information
 #
 from argparse import ArgumentParser, Namespace
-from importlib.metadata import PackageMetadata, metadata
+from collections.abc import MappingView
+from importlib.metadata import PackageMetadata, Distribution, metadata
 from io import StringIO
 from json import loads as load_json
 from pathlib import Path
@@ -36,7 +37,7 @@ def _parse_meta_data(pyproject: Path) -> StandardMetadata:
     with pyproject.open("rb") as file_ptr:
         data = load_toml(file_ptr)
 
-    return StandardMetadata.from_pyproject(data)
+    return StandardMetadata.from_pyproject(data, pyproject.parent)
 
 
 class ProjectBuilder:
@@ -90,41 +91,46 @@ class ProjectBuilder:
         _ = ProjectBuilder.__parse_packages(graph, parsed)
 
         dependencies: list[Component] = []
-        development_dependencies: list[Component] = []
+        development_dependencies: dict[str, list[Component]] = {}
         optional_dependencies: dict[str, list[Component]] = {}
-        with _LoadContext(self.__project):
-            parsed_components: dict[str, Component] = {}
+        ws: MappingView[str, Distribution] = self.__project.environment.get_working_set()
+        parsed_components: dict[str, Component] = {}
 
-            for dependency_name in self.__project.get_dependencies("default"):
-                package: PdmGraphPackage = parsed[dependency_name]
+        for dependency_name in self.__project.get_dependencies("default"):
+            package: PdmGraphPackage = parsed[dependency_name]
+            component = ProjectBuilder.__convert_package(
+                package,
+                parsed_components,
+                ws,
+            )
+            dependencies.append(component)
+
+        dev_dependency_groups = tuple(self.__project.pyproject.settings.get("dev-dependencies", {}))
+
+        for group in self.__project.iter_groups():
+            if group in dev_dependency_groups:
+                continue
+
+            optional_dependencies[group] = []
+            for dependency_name in self.__project.get_dependencies(group):
+                opt_package: PdmGraphPackage = parsed[dependency_name]
                 component = ProjectBuilder.__convert_package(
-                    package,
+                    opt_package,
                     parsed_components,
+                    ws,
                 )
-                dependencies.append(component)
-
-            dev_dependency_groups = ("dev-dependencies",)
-
-            for group in self.__project.iter_groups():
-                if group in dev_dependency_groups:
-                    continue
-
-                optional_dependencies[group] = []
-                for dependency_name in self.__project.get_dependencies(group):
-                    opt_package: PdmGraphPackage = parsed[dependency_name]
-                    component = ProjectBuilder.__convert_package(
-                        opt_package,
-                        parsed_components,
-                    )
-                    optional_dependencies[group].append(component)
-
-            for dependency_name in self.__project.dev_dependencies:
+                optional_dependencies[group].append(component)
+        
+        for group in dev_dependency_groups:
+            development_dependencies[group] = []
+            for dependency_name in self.__project.get_dependencies(group):
                 dev_package: PdmGraphPackage = parsed[dependency_name]
                 component = ProjectBuilder.__convert_package(
                     dev_package,
                     parsed_components,
+                    ws,
                 )
-                development_dependencies.append(component)
+                development_dependencies[group].append(component)
 
         result: Project = Project(
             self.__metadata.name,
@@ -134,10 +140,10 @@ class ProjectBuilder:
             self.__metadata.authors,
             self.__metadata.version,
         )
-
+        
         result.dependencies.extend(dependencies)
         result.optional_dependencies.update(optional_dependencies)
-        result.development_dependencies.extend(development_dependencies)
+        result.development_dependencies.update(development_dependencies)
 
         return result
 
@@ -145,6 +151,7 @@ class ProjectBuilder:
     def __convert_packages(
         pdm_packages: list[PdmGraphPackage],
         components: dict[str, Component],
+        ws: MappingView[str, Distribution],
     ) -> list[Component]:
         result: list[Component] = []
 
@@ -158,6 +165,7 @@ class ProjectBuilder:
             component = ProjectBuilder.__convert_package(
                 package,
                 components,
+                ws,
             )
             components[package.package] = component
             result.append(component)
@@ -191,14 +199,17 @@ class ProjectBuilder:
     def __convert_package(
         package: PdmGraphPackage,
         components: dict[str, Component],
+        ws:  MappingView[str, Distribution]
     ) -> Component:
         name: str = package.package
         normalized_name = name.split("[")[0]
         if normalized_name in components:
             return components[normalized_name]
 
+        dist: Distribution = ws[normalized_name]
         version: Version = Version(package.version)
-        meta_data: PackageMetadata = metadata(normalized_name)
+
+        meta_data: PackageMetadata = dist.metadata
         author: str | None = meta_data["Author"]
         author_email: str | None = meta_data["Author-email"]
         license_field: str = meta_data["License"]
@@ -206,6 +217,7 @@ class ProjectBuilder:
         dependencies: list[Component] = ProjectBuilder.__convert_packages(
             package.dependencies,
             components,
+            ws,
         )
 
         authors = ProjectBuilder.__get_author(author, author_email)

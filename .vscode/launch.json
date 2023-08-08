@@ -1,0 +1,11 @@
+{
+    "configurations": [
+        {
+            "name": "Launch",
+            "type": "python",
+            "request": "launch",
+            "module": "pdm",
+            "args": ["sbom"]
+        }
+    ]
+}
