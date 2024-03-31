@@ -18,15 +18,17 @@ from typing import (
     Mapping,
     Protocol,
     cast,
-    runtime_checkable,
+    runtime_checkable, Final,
 )
 
-from .data import Project
+from ..dag import Graph
+from ..project import ProjectInfo, ToolInfo
 
 
 @runtime_checkable
 class SupportsFileFormat(Protocol):
     SUPPORTED_FILE_FORMATS: frozenset[str]
+    DEFAULT_FILE_FORMAT: str
 
     @property
     def file_format(self) -> str:
@@ -40,6 +42,7 @@ class SupportsFileFormat(Protocol):
 @runtime_checkable
 class SupportsFileVersion(Protocol):
     SUPPORTED_VERSIONS: frozenset[str]
+    DEFAULT_FILE_VERSION: str
 
     @property
     def file_version(self) -> str:
@@ -50,30 +53,13 @@ class SupportsFileVersion(Protocol):
         raise NotImplementedError()
 
 
-class ToolInfo:
-    def __init__(self, vendor: str, name: str, version: str) -> None:
-        self.__vendor = vendor
-        self.__name = name
-        self.__version = version
-
-    @property
-    def vendor(self) -> str:
-        return self.__vendor
-
-    @property
-    def name(self) -> str:
-        return self.__name
-
-    @property
-    def version(self) -> str:
-        return self.__version
-
-
 class ExporterBase(ABC):
     FORMAT_NAME: str
+    FORMAT_DESCRIPTION: str
+    SHORT_FORMAT_CODE: str
 
-    def __init__(self, project: Project, *tools: ToolInfo) -> None:
-        self.__project = project
+    def __init__(self, graph: Graph, *tools: ToolInfo) -> None:
+        self.__graph = graph
         self.__tools = list(tools)
 
     @property
@@ -82,8 +68,12 @@ class ExporterBase(ABC):
         raise NotImplementedError()
 
     @property
-    def project(self) -> Project:
-        return self.__project
+    def graph(self) -> Graph:
+        return self.__graph
+
+    @property
+    def project(self) -> ProjectInfo:
+        return self.__graph.root_node.project
 
     @property
     def tools(self) -> Iterable[ToolInfo]:
@@ -111,6 +101,8 @@ class FormatAndVersionMixin:
 
     SUPPORTED_FILE_FORMATS: frozenset[str] = frozenset(_EXTENSIONS.keys())
     SUPPORTED_VERSIONS: frozenset[str] = frozenset(_VERSIONS.keys())
+    DEFAULT_FILE_FORMAT: str
+    DEFAULT_FILE_VERSION: str
 
     def __init__(self) -> None:
         formats = list(self.SUPPORTED_FILE_FORMATS)
