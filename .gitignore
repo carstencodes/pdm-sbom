@@ -4,3 +4,4 @@ __pypackages__/
 build/
 dist/
 .pdm-python
+.idea

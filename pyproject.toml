@@ -1,28 +1,32 @@
-[tool]
 [tool.pdm]
 
 [project]
 name = "pdm-sbom"
-version = "0.6.0"
+version = "0.8.0"
 description = "Generate Software Bill of Materials from PDM based projects"
 authors = [
-    {name = "Carsten Igel", email = "cig@bite-that-bit.de"},
+    { name = "Carsten Igel", email = "cig@bite-that-bit.de" },
 ]
 dependencies = [
     "pdm>=2.3.4",
     "pyproject-metadata>=0.6.1",
-    "tomli>=2.0.1; python_version<='3.10'",
     "resolvelib>=0.9.0",
     "packaging>=21.3",
+    "pdm-pfsc>=0.11.3",
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 readme = "README.md"
-license = {text = "MIT"}
+
+[project.license]
+text = "MIT"
 
 [project.license-files]
 paths = [
     "LICENSE",
 ]
+
+[project.urls]
+homepage = "https://github.com/carstencodes/pdm-sbom"
 
 [project.optional-dependencies]
 cyclonedx = [
@@ -33,11 +37,19 @@ spdx = [
     "packageurl-python>=0.10.4",
     "spdx-tools>=0.7.0",
 ]
+buildinfo = [
+    "buildinfo-om>=0.6.0",
+]
+spdx3 = [
+    "spdx-tools>=0.8.2",
+    "pyshacl>=0.25.0",
+]
 
 [project.entry-points.pdm]
 pdm-sbom = "pdm_sbom:main"
 
-
 [build-system]
-requires = ["pdm-pep517>=1.0"]
+requires = [
+    "pdm-pep517>=1.0",
+]
 build-backend = "pdm.pep517.api"
