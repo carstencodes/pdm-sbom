@@ -20,14 +20,16 @@ from .base import ExporterBase
 
 class JsonExporter(ExporterBase):
     FORMAT_NAME: str = "json"
+    SHORT_FORMAT_CODE: str = "j"
+    FORMAT_DESCRIPTION: str = "Pure JSON Serialization - unstable"
 
     @property
     def target_file_extension(self) -> str:
-        return ".json"
+        return ".pdm-sbom.json"
 
     def export(self, stream: IO[AnyStr]) -> None:
         data = asdict(self.project)
-        data_to_write: str | bytes = dumps(
+        data_to_write: str = dumps(
             data,
             cls=_VersionSupportingEncoder,
         )
