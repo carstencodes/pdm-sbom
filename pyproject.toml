@@ -2,7 +2,7 @@
 
 [project]
 name = "pdm-sbom"
-version = "0.9.0"
+version = "0.9.0.post1"
 description = "Generate Software Bill of Materials from PDM based projects"
 authors = [
     { name = "Carsten Igel", email = "cig@bite-that-bit.de" },
