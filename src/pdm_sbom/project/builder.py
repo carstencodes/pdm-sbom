@@ -1,24 +1,51 @@
+#
+# SPDX-License-Identifier: MIT
+#
+# Copyright (c) 2021-2024 Carsten Igel.
+#
+# This file is part of pdm-bump
+# (see https://github.com/carstencodes/pdm-sbom).
+#
+# This file is published using the MIT license.
+# Refer to LICENSE for more information
+#
 import hashlib
 import re
 from collections.abc import Mapping, Sequence
 from functools import cached_property
-from importlib.metadata import PackageMetadata, metadata as resolve_metadata, PackageNotFoundError
+from importlib.metadata import PackageMetadata, PackageNotFoundError
+from importlib.metadata import metadata as resolve_metadata
 from pathlib import Path
-from typing import Callable, Optional, Final, ClassVar, Union
+from typing import Callable, ClassVar, Final, Optional, Union
 
 from packaging.requirements import Requirement
-from packaging.version import VERSION_PATTERN as _UNNAMED_VERSION_PATTERN, Version
-from pdm_pfsc.logging import traced_function, logger
+from packaging.version import VERSION_PATTERN as _UNNAMED_VERSION_PATTERN
+from packaging.version import Version
+from pdm_pfsc.logging import logger, traced_function
 
-from pdm_sbom.project.dataclasses import ProjectDefinition, ProjectInfo, ComponentInfo, ReferencedComponent, LockFile, \
-    DependencyInfo, DEFAULT_GROUP_NAME, AuthorInfo, LicenseInfo, LicenseData, UNDEFINED_VERSION, \
-    ReferencedFile, NoLicense
+from .dataclasses import (
+    DEFAULT_GROUP_NAME,
+    UNDEFINED_VERSION,
+    AuthorInfo,
+    ComponentInfo,
+    DependencyInfo,
+    LicenseData,
+    LicenseInfo,
+    LockFile,
+    NoLicense,
+    ProjectDefinition,
+    ProjectInfo,
+    ReferencedComponent,
+    ReferencedFile,
+)
 
 _REPLACE = re.compile(r"\?P<\w+>")
 VERSION_PATTERN: Final[str] = _REPLACE.sub("", _UNNAMED_VERSION_PATTERN)
 
 
-def unresolved_component(name: str, files: Sequence[ReferencedFile]) -> ComponentInfo:
+def unresolved_component(
+    name: str, files: Sequence[ReferencedFile]
+) -> ComponentInfo:
     return ComponentInfo(
         name=name,
         files=files,
@@ -82,17 +109,25 @@ class AuthorResolver:
 class LicenseResolver:
     def resolve(self, meta_data: PackageMetadata) -> LicenseInfo:
         classifiers: list[str] = meta_data.get_all("Classifier", [])
-        result: Optional[LicenseInfo] = self._resolve_from_classifiers(classifiers)
+        result: Optional[LicenseInfo] = self._resolve_from_classifiers(
+            classifiers
+        )
         if result is not None:
             return result
 
-        return self._resolve_from_license(meta_data.get("License", None), meta_data["Name"])
+        return self._resolve_from_license(
+            meta_data["License"] if "License" in meta_data else None,
+            meta_data["Name"]
+        )
 
-
-    def _resolve_from_classifiers(self, classifiers: Sequence[str]) -> Optional[LicenseInfo]:
+    def _resolve_from_classifiers(
+        self, classifiers: Sequence[str]
+    ) -> Optional[LicenseInfo]:
         return None  # TODO
 
-    def _resolve_from_license(self, license_id: Optional[str], package_name: str) -> LicenseInfo:
+    def _resolve_from_license(
+        self, license_id: Optional[str], package_name: str
+    ) -> LicenseInfo:
         if license_id is None:
             return NoLicense(package_name=package_name)
 
@@ -112,13 +147,19 @@ class UnresolvedPackage:
 
 
 class MetaDataResolver:
-    resolver_method: ClassVar[Callable[[str], PackageMetadata]] = resolve_metadata
+    resolver_method: ClassVar[Callable[[str], PackageMetadata]] = (
+        resolve_metadata
+    )
 
-    def resolve(self, package_name: str) -> Union[PackageMetadata, UnresolvedPackage]:
+    def resolve(
+        self, package_name: str
+    ) -> Union[PackageMetadata, UnresolvedPackage]:
         try:
             return resolve_metadata(package_name)
         except ValueError as ve:
-            raise DependencyTreeError(f"Invalid package name: {package_name}") from ve
+            raise DependencyTreeError(
+                f"Invalid package name: {package_name}"
+            ) from ve
         except PackageNotFoundError:
             return UnresolvedPackage(package_name)
 
@@ -132,15 +173,23 @@ class ComponentBuilder:
 
     @traced_function
     def add_from_lock_file(self, lock_file: LockFile) -> None:
-        package_map: Mapping[str, ReferencedComponent] = {m.name: m for m in lock_file.packages}
+        package_map: Mapping[str, ReferencedComponent] = {
+            m.name: m for m in lock_file.packages
+        }
         for reference in package_map.values():
             logger.debug("Resolving reference for %s", reference.name)
             if reference.name not in self._components:
                 logger.debug("Starting resolution for %s", reference.name)
-                self._components[reference.name] = self._resolve(reference, package_map)
+                self._components[reference.name] = self._resolve(
+                    reference, package_map
+                )
 
     @traced_function
-    def _resolve(self, reference: ReferencedComponent, package_map: Mapping[str, ReferencedComponent]) -> ComponentInfo:
+    def _resolve(
+        self,
+        reference: ReferencedComponent,
+        package_map: Mapping[str, ReferencedComponent],
+    ) -> ComponentInfo:
         if reference.name in self._components:
             logger.debug("Referenced %s already resolved", reference.name)
             return self._components[reference.name]
@@ -149,29 +198,44 @@ class ComponentBuilder:
         for dependency in reference.dependencies:
             if dependency.name == reference.name:
                 if len(reference.dependencies) == 0:
-                    logger.warning("Circular dependency detected. Ignoring %s", dependency.name)
+                    logger.warning(
+                        "Circular dependency detected. Ignoring %s",
+                        dependency.name,
+                    )
                 continue
             package_name: str = dependency.name
             if package_name not in package_map:
-                raise DependencyTreeError(f"Could not find package {package_name} derived "
-                                          f"from {dependency.name} in package map.")
+                raise DependencyTreeError(
+                    f"Could not find package {package_name} derived "
+                    f"from {dependency.name} in package map."
+                )
 
             package = package_map[package_name]
-            logger.debug("Resolving dependency %s for reference %s", dependency.name, reference.name)
+            logger.debug(
+                "Resolving dependency %s for reference %s",
+                dependency.name,
+                reference.name,
+            )
             component: ComponentInfo = self._resolve(package, package_map)
 
             package_dependency: DependencyInfo = DependencyInfo(
-                requirement=dependency,
-                component=component
+                requirement=dependency, component=component
             )
-            logger.debug("Resolved dependency %s for reference %s to %s",
-                         dependency.name, reference.name, package_dependency)
+            logger.debug(
+                "Resolved dependency %s for reference %s to %s",
+                dependency.name,
+                reference.name,
+                package_dependency,
+            )
             dependencies.append(package_dependency)
 
+        resolved_dependencies: dict[str, Sequence[DependencyInfo]]
         resolved_dependencies = {DEFAULT_GROUP_NAME: dependencies}
 
         logger.debug("Resolving meta data for %s", reference.name)
-        package_meta_data: Union[PackageMetadata, UnresolvedPackage] = self._meta_data_resolver.resolve(reference.name)
+        package_meta_data: Union[PackageMetadata, UnresolvedPackage] = (
+            self._meta_data_resolver.resolve(reference.name)
+        )
 
         result: ComponentInfo
         if not isinstance(package_meta_data, UnresolvedPackage):
@@ -188,9 +252,11 @@ class ComponentBuilder:
                 name=reference.name,
                 files=reference.files,
             )
-            logger.warning("Failed to resolve package %s, as it is not installed. "
-                           "Maybe due to falsified conditions.",
-                           reference.name)
+            logger.warning(
+                "Failed to resolve package %s, as it is not installed. "
+                "Maybe due to falsified conditions.",
+                reference.name,
+            )
 
         logger.debug("Reference %s resolved to %s", reference.name, result)
         self._components[reference.name] = result
@@ -200,10 +266,15 @@ class ComponentBuilder:
     @traced_function
     def resolve(self, requirement: Requirement) -> DependencyInfo:
         if requirement.name not in self._components:
-            raise DependencyTreeError(f"Could not find dependency {requirement.name} in list of dependencies")
+            raise DependencyTreeError(
+                f"Could not find dependency {requirement.name} "
+                "in list of dependencies"
+            )
 
         component: ComponentInfo = self._components[requirement.name]
-        parsed_dependency: DependencyInfo = DependencyInfo(requirement=requirement, component=component)
+        parsed_dependency: DependencyInfo = DependencyInfo(
+            requirement=requirement, component=component
+        )
 
         return parsed_dependency
 
@@ -239,17 +310,17 @@ class ProjectBuilder:
 
         pi: ProjectInfo = ProjectInfo(
             name=self.__project.name,
-            license=self.__license_resolver.resolve_from_license_data(self.__project.license),
+            license=self.__license_resolver.resolve_from_license_data(
+                self.__project.license
+            ),
             authors=self.__project.authors,
             groups=self.__project.lockfile.groups,
             dependencies=dependencies,
             resolved_version=self.__project.version,
             files=[
-                ReferencedFile(
-                    file=f.name,
-                    hash=hash_file(f)
-                )
-                for f in files if f.is_file()
+                ReferencedFile(file=f.name, hash=hash_file(f))
+                for f in files
+                if f.is_file()
             ],
             homepage=self.__project.homepage,
         )

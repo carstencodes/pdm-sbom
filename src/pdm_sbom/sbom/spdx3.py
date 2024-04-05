@@ -1,9 +1,9 @@
 #
 # SPDX-License-Identifier: MIT
 #
-# Copyright (c) 2022-2023 Carsten Igel.
+# Copyright (c) 2021-2024 Carsten Igel.
 #
-# This file is part of pdm-sbom
+# This file is part of pdm-bump
 # (see https://github.com/carstencodes/pdm-sbom).
 #
 # This file is published using the MIT license.
@@ -13,46 +13,63 @@ import inspect
 import mimetypes
 import os
 import tempfile
-import time
-from pathlib import Path
-from typing import AnyStr, Mapping, Optional
 from datetime import datetime
+from pathlib import Path
+from typing import IO, AnyStr, Callable, Mapping
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 import semantic_version
 from packageurl import PackageURL
 from pdm_pfsc.logging import logger
 from spdx_tools.spdx3.model import (
+    Agent,
     CreationInfo,
-    Relationship,
-    RelationshipType,
-    ProfileIdentifierType, Agent, Tool, IntegrityMethod, Hash, HashAlgorithm, RelationshipCompleteness,
+    Hash,
+    HashAlgorithm,
     LifecycleScopeType,
+    ProfileIdentifierType,
+    RelationshipCompleteness,
+    RelationshipType,
+    Tool,
 )
-from spdx_tools.spdx3.model.software import Sbom, SBOMType, Package, SoftwarePurpose, File, \
-    SoftwareDependencyRelationship, SoftwareDependencyLinkType, DependencyConditionalityType
+from spdx_tools.spdx3.model.software import (
+    DependencyConditionalityType,
+    File,
+    Package,
+    Sbom,
+    SBOMType,
+    SoftwareDependencyLinkType,
+    SoftwareDependencyRelationship,
+    SoftwarePurpose,
+)
 from spdx_tools.spdx3.payload import Payload
-from spdx_tools.spdx3.writer.json_ld.json_ld_writer import write_payload as write_jsonld
-from spdx_tools.spdx3.validation.json_ld.shacl_validation import validate_against_shacl_from_file
+from spdx_tools.spdx3.validation.json_ld.shacl_validation import (
+    validate_against_shacl_from_file,
+)
+from spdx_tools.spdx3.writer.json_ld.json_ld_writer import (
+    write_payload as write_jsonld,
+)
 
-from .base import ExporterBase, FormatAndVersionMixin
-
-from typing import Callable, Union
-from typing import IO
-
-from ..dag import Node, UsageKind
 from ..project import ComponentInfo, ToolInfo
 from ..project.dataclasses import DEFAULT_GROUP_NAME, DEVELOPMENT_GROUP_NAME
-from ..project.tools import create_module_info, create_self_info, create_pdm_info
+from ..project.tools import (
+    create_module_info,
+    create_pdm_info,
+    create_self_info,
+)
+from .base import ExporterBase, FormatAndVersionMixin
 
 _relationship_names_from_members: dict[RelationshipType, str] = {
     v: k for k, v in RelationshipType.__members__.items()
 }
 
-SHACL_FILE_PATH = Path(inspect.getfile(write_jsonld)).resolve().parent / "model.ttl"
+SHACL_FILE_PATH = (
+    Path(inspect.getfile(write_jsonld)).resolve().parent / "model.ttl"
+)
 
 if not mimetypes.inited:
     mimetypes.init()
+
 
 class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
     _EXTENSIONS: Mapping[str, tuple[str, Callable[[Payload, str], None]]] = {
@@ -80,22 +97,32 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
 
     def export(self, stream: IO[AnyStr]) -> None:
         spec_version: tuple[int, int] = self._VERSIONS[self.file_version]
-        
+
         doc_id: UUID = self.__component_to_uuid(self.project)
         doc_name: str = Spdx3Exporter.__component_to_name(self.project)
 
-        homepage: str = (self.project.homepage
-                         or f"https://spdx-boms.1.0.0.127.nip.io/bom-namespaces/{self.project.name}")
+        homepage: str = (
+            self.project.homepage
+            or f"https://spdx-boms.1.0.0.127.nip.io/bom-namespaces"
+               f"/{self.project.name}"
+        )
 
-        project_url: str = f"{homepage.rstrip('/')}/spdx/{self.file_version}/{doc_name}-{str(doc_id)}"  # TODO
+        project_url: str = (
+            f"{homepage.rstrip('/')}/spdx/{self.file_version}"
+            f"/{doc_name}-{str(doc_id)}"  # TODO
+        )
 
         doc_name: str = Spdx3Exporter.__component_to_name(self.project)
 
         payload: Payload = Payload()
 
-        creation_info = self._create_creation_info(payload, spec_version, project_url)
+        creation_info = self._create_creation_info(
+            payload, spec_version, project_url
+        )
 
-        elements, root_element = self._create_elements(project_url, payload, creation_info)
+        elements, root_element = self._create_elements(
+            project_url, payload, creation_info
+        )
 
         sbom: Sbom = Sbom(
             spdx_id=Spdx3Exporter.__get_reference(project_url, doc_id),
@@ -119,14 +146,18 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
         payload.add_element(sbom)
 
         writer = self._EXTENSIONS[self.file_format][1]
-        fd, name = tempfile.mkstemp(prefix=self.project.name, suffix="sbom", text=True)
+        fd, name = tempfile.mkstemp(
+            prefix=self.project.name, suffix="sbom", text=True
+        )
         try:
             os.close(fd)
             os.remove(name)
             name = f"{name}{self.target_file_extension}"
             # .jsonld is added to file name automatically
             writer(payload, name.replace(".jsonld", ""))
-            is_valid, _, error_text = validate_against_shacl_from_file(name, str(SHACL_FILE_PATH))
+            is_valid, _, error_text = validate_against_shacl_from_file(
+                name, str(SHACL_FILE_PATH)
+            )
             if not is_valid:
                 logger.error(error_text)
             with open(name, "r") as reader:
@@ -135,28 +166,27 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
         finally:
             os.remove(name)
 
-    def _create_creation_info(self, payload: Payload, spec_version: tuple[int, int], namespace: str):
+    def _create_creation_info(
+        self, payload: Payload, spec_version: tuple[int, int], namespace: str
+    ):
         self_tool_info = create_self_info()
         pdm_tool_info = create_pdm_info()
         spdx_tool_info = create_module_info("spdx_tools")
         self_tool: Tool = Tool(
             spdx_id=Spdx3Exporter.__get_reference(
-                namespace,
-                Spdx3Exporter.__tool_to_uuid(self_tool_info)
+                namespace, Spdx3Exporter.__tool_to_uuid(self_tool_info)
             ),
             name=f"{self_tool_info.name}@{self_tool_info.vendor}",
         )
         pdm_tool: Tool = Tool(
             spdx_id=Spdx3Exporter.__get_reference(
-                namespace,
-                Spdx3Exporter.__tool_to_uuid(pdm_tool_info)
+                namespace, Spdx3Exporter.__tool_to_uuid(pdm_tool_info)
             ),
             name=f"{pdm_tool_info.name}@{pdm_tool_info.vendor}",
         )
         spdx_tool: Tool = Tool(
             spdx_id=Spdx3Exporter.__get_reference(
-                namespace,
-                Spdx3Exporter.__tool_to_uuid(spdx_tool_info)
+                namespace, Spdx3Exporter.__tool_to_uuid(spdx_tool_info)
             ),
             name=f"{spdx_tool_info.name}@{spdx_tool_info.vendor}",
         )
@@ -164,13 +194,12 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
         payload.add_element(pdm_tool)
         payload.add_element(spdx_tool)
         creation_info: CreationInfo = CreationInfo(
-            spec_version=semantic_version.Version(major=spec_version[0], minor=spec_version[1], patch=0),
+            spec_version=semantic_version.Version(
+                major=spec_version[0], minor=spec_version[1], patch=0
+            ),
             created=datetime.utcnow(),
-            created_by=[
-            ],
-            profile=[
-                ProfileIdentifierType.SOFTWARE
-            ],
+            created_by=[],
+            profile=[ProfileIdentifierType.SOFTWARE],
             created_using=[
                 self_tool.spdx_id,
                 pdm_tool.spdx_id,
@@ -183,9 +212,8 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
         spdx_tool.creation_info = creation_info
         creator_agent: Agent = Agent(
             spdx_id=Spdx3Exporter.__get_reference(
-                namespace,
-                Spdx3Exporter.__agent_uuid()
-                ),
+                namespace, Spdx3Exporter.__agent_uuid()
+            ),
             creation_info=creation_info,
             name="pdm-sbom:Spdx3Exporter",
             summary="An SBOM creation tool for SPDX",
@@ -224,30 +252,31 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
 
     @staticmethod
     def __component_to_name(component: ComponentInfo) -> str:
-        return f"{component.name}-{str(component.resolved_version) if component.resolved else 'UNKNOWN_VERSION'}"
+        version: str = "UNKNOWN_VERSION"
+        if component.resolved:
+            version = str(component.resolved_version)
+        return f"{component.name}-{version}"
 
     @staticmethod
     def __get_reference(namespace: str, identifier: UUID) -> str:
         return f"{namespace}#SPDXRef-{identifier}"
 
-    @staticmethod
-    def __component_to_uuid(component: ComponentInfo) -> UUID:
-        purl: PackageURL = component.get_package_url()
-
-        unique_id: UUID = uuid5(NAMESPACE_URL, purl.to_string())
-
-        return unique_id
-
-    def _create_elements(self, namespace: str, payload: Payload, creation_info: CreationInfo) -> tuple[list[str], str]:
+    def _create_elements(
+        self, namespace: str, payload: Payload, creation_info: CreationInfo
+    ) -> tuple[list[str], str]:
         root_element_id: str = ""
         element_ids: list[str] = []
         for node in self.graph.nodes:
-            Spdx3Exporter._get_files(namespace, payload, creation_info, node.component)
-            Spdx3Exporter._get_relationships(namespace, payload, creation_info, node.component)
+            Spdx3Exporter._get_files(
+                namespace, payload, creation_info, node.component
+            )
+            Spdx3Exporter._get_relationships(
+                namespace, payload, creation_info, node.component
+            )
             element: Package = Package(
                 spdx_id=Spdx3Exporter.__get_reference(
                     namespace,
-                    Spdx3Exporter.__component_to_uuid(node.component)
+                    Spdx3Exporter.__component_to_uuid(node.component),
                 ),
                 name=node.component.name,
                 creation_info=creation_info,
@@ -288,12 +317,19 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
         return element_ids, root_element_id
 
     @staticmethod
-    def __get_file_ref(namespace: str, component: ComponentInfo, file_name: str) -> UUID:
+    def __get_file_ref(
+        namespace: str, component: ComponentInfo, file_name: str
+    ) -> UUID:
         file_url = f"{namespace}/components/{component.name}/files/{file_name}"
         return uuid5(NAMESPACE_URL, file_url)
 
     @staticmethod
-    def _get_files(namespace: str, payload: Payload, creation_info: CreationInfo, component: ComponentInfo) -> None:
+    def _get_files(
+        namespace: str,
+        payload: Payload,
+        creation_info: CreationInfo,
+        component: ComponentInfo,
+    ) -> None:
         if len(component.files) == 0:
             return
 
@@ -302,7 +338,9 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
             file_instance: File = File(
                 spdx_id=Spdx3Exporter.__get_reference(
                     namespace,
-                    Spdx3Exporter.__get_file_ref(namespace, component, file.file)
+                    Spdx3Exporter.__get_file_ref(
+                        namespace, component, file.file
+                    ),
                 ),
                 name=file.file,
                 creation_info=creation_info,
@@ -320,10 +358,11 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
                 external_identifier=None,
                 extension=None,
                 originated_by=None,
-                supplied_by=[Spdx3Exporter.__get_reference(
-                    namespace,
-                    Spdx3Exporter.__component_to_uuid(component)
-                )],
+                supplied_by=[
+                    Spdx3Exporter.__get_reference(
+                        namespace, Spdx3Exporter.__component_to_uuid(component)
+                    )
+                ],
                 built_time=None,
                 release_time=None,
                 valid_until_time=None,
@@ -340,11 +379,20 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
             payload.add_element(file_instance)
 
     @staticmethod
-    def _get_relationships(namespace: str, payload: Payload, creation_info: CreationInfo, component: ComponentInfo) -> None:
-        art_type: SoftwareDependencyLinkType = SoftwareDependencyLinkType.DYNAMIC
+    def _get_relationships(
+        namespace: str,
+        payload: Payload,
+        creation_info: CreationInfo,
+        component: ComponentInfo,
+    ) -> None:
+        art_type: SoftwareDependencyLinkType = (
+            SoftwareDependencyLinkType.DYNAMIC
+        )
         for dependency_group in component.dependencies.keys():
             rel_type: RelationshipType = RelationshipType.RUNTIME_DEPENDENCY
-            cond_type: DependencyConditionalityType = DependencyConditionalityType.REQUIRED
+            cond_type: DependencyConditionalityType = (
+                DependencyConditionalityType.REQUIRED
+            )
             ls_type: LifecycleScopeType = LifecycleScopeType.RUNTIME
 
             if dependency_group != DEFAULT_GROUP_NAME:
@@ -359,36 +407,39 @@ class Spdx3Exporter(ExporterBase, FormatAndVersionMixin):
                 related_components.append(
                     Spdx3Exporter.__get_reference(
                         namespace,
-                        Spdx3Exporter.__component_to_uuid(dependency.component)
+                        Spdx3Exporter.__component_to_uuid(
+                            dependency.component
+                        ),
                     )
                 )
 
             if len(related_components) == 0:
                 continue
 
-            sw_rel: SoftwareDependencyRelationship = SoftwareDependencyRelationship(
-                spdx_id=f"{namespace}/relationships/from/{component.name}",
-                from_element=Spdx3Exporter.__get_reference(
-                    namespace,
-                    Spdx3Exporter.__component_to_uuid(component)
-                ),
-                relationship_type=rel_type,
-                to=related_components,
-                creation_info=creation_info,
-                name=f"{component.name}-relationships-{dependency_group}",
-                summary=None,
-                description=None,
-                comment=None,
-                verified_using=None,
-                external_reference=None,
-                external_identifier=None,
-                extension=None,
-                completeness=RelationshipCompleteness.COMPLETE,
-                start_time=None,
-                end_time=None,
-                scope=ls_type,
-                software_linkage=art_type,
-                conditionality=cond_type,
+            sw_rel: SoftwareDependencyRelationship = (
+                SoftwareDependencyRelationship(
+                    spdx_id=f"{namespace}/relationships/from/{component.name}",
+                    from_element=Spdx3Exporter.__get_reference(
+                        namespace, Spdx3Exporter.__component_to_uuid(component)
+                    ),
+                    relationship_type=rel_type,
+                    to=related_components,
+                    creation_info=creation_info,
+                    name=f"{component.name}-relationships-{dependency_group}",
+                    summary=None,
+                    description=None,
+                    comment=None,
+                    verified_using=None,
+                    external_reference=None,
+                    external_identifier=None,
+                    extension=None,
+                    completeness=RelationshipCompleteness.COMPLETE,
+                    start_time=None,
+                    end_time=None,
+                    scope=ls_type,
+                    software_linkage=art_type,
+                    conditionality=cond_type,
+                )
             )
 
             payload.add_element(sw_rel)

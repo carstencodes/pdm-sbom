@@ -1,9 +1,20 @@
-import hashlib
+#
+# SPDX-License-Identifier: MIT
+#
+# Copyright (c) 2021-2024 Carsten Igel.
+#
+# This file is part of pdm-bump
+# (see https://github.com/carstencodes/pdm-sbom).
+#
+# This file is published using the MIT license.
+# Refer to LICENSE for more information
+#
+
 from abc import ABC, abstractmethod
-from collections.abc import Sequence, Mapping, Iterator
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from functools import cached_property
-from pathlib import Path
+from os import PathLike
 from typing import Final, Optional
 
 from packageurl import PackageURL
@@ -31,13 +42,19 @@ class AuthorInfo(ABC):
         return None
 
     def __str__(self) -> str:
-        return f"{self.name} {self.description if self.description is not None else ''} "\
-               f"<{self.email if self.email is not None else ''}>"
+        return (
+            f"{self.name} "
+            f"{self.description if self.description is not None else ''} "
+            f"<{self.email if self.email is not None else ''}>"
+        )
 
     def __repr__(self) -> str:
-        return (f"{type(self).__name__} name={self.name} "
-                f"description={self.description if self.description is not None else 'None'}"
-                f"email={self.email if self.email is not None else 'None'}")
+        return (
+            f"{type(self).__name__} name={self.name} "
+            "description="
+            f"{self.description if self.description is not None else 'None'}"
+            f"email={self.email if self.email is not None else 'None'}"
+        )
 
 
 @dataclass(frozen=True)
@@ -52,6 +69,7 @@ class ReferencedFile:
     @cached_property
     def hash_value(self) -> str:
         return self.hash.split(":", 2)[1]
+
 
 @dataclass(frozen=True)
 class ReferencedComponent:
@@ -73,7 +91,7 @@ class LockFile:
 @dataclass(frozen=True)
 class LicenseData:
     text: Optional[str] = field()
-    file: Optional[Path] = field()
+    file: Optional[PathLike] = field()
 
 
 @dataclass(frozen=True)
@@ -86,7 +104,9 @@ class ProjectDefinition:
     homepage: Optional[str] = field()
     authors: Sequence[AuthorInfo] = field(default_factory=list)
     groups: Sequence[str] = field(default_factory=list)
-    dependencies: Mapping[str, Sequence[Requirement]] = field(default_factory=dict)
+    dependencies: Mapping[str, Sequence[Requirement]] = field(
+        default_factory=dict
+    )
 
 
 @dataclass(frozen=True)
@@ -111,7 +131,9 @@ class ComponentInfo:
     resolved_version: Version = field(hash=False)
     license: LicenseInfo = field(hash=False)
     authors: Sequence[AuthorInfo] = field(default_factory=list, hash=False)
-    dependencies: dict[str, Sequence[DependencyInfo]] = field(default_factory=list, hash=False)
+    dependencies: dict[str, Sequence[DependencyInfo]] = field(
+        default_factory=dict, hash=False
+    )
     files: Sequence[ReferencedFile] = field(default_factory=list, hash=False)
     resolved: bool = field(default=True, hash=True)
     homepage: Optional[str] = field(default=None, hash=False)
@@ -143,7 +165,7 @@ class ProjectInfo(ComponentInfo):
 
     @property
     def optional_dependencies(self) -> Sequence[DependencyInfo]:
-        items = []
+        items: list[DependencyInfo] = []
         for group in self.dependencies.keys():
             if group in (DEFAULT_GROUP_NAME, DEVELOPMENT_GROUP_NAME):
                 continue

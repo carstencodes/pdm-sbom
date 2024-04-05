@@ -1,9 +1,9 @@
 #
 # SPDX-License-Identifier: MIT
 #
-# Copyright (c) 2022-2023 Carsten Igel.
+# Copyright (c) 2021-2024 Carsten Igel.
 #
-# This file is part of pdm-sbom
+# This file is part of pdm-bump
 # (see https://github.com/carstencodes/pdm-sbom).
 #
 # This file is published using the MIT license.
@@ -12,14 +12,10 @@
 from collections import namedtuple
 from typing import Sequence
 
-from .base import (
-    ExporterBase,
-    SupportsFileFormat,
-    SupportsFileVersion,
-)
-from .json import JsonExporter
-from ..project import ToolInfo as _ToolInfo
 from ..dag import Graph as _Graph
+from ..project import ToolInfo as _ToolInfo
+from .base import ExporterBase, SupportsFileFormat, SupportsFileVersion
+from .json import JsonExporter
 
 try:
     from .cyclonedx import CycloneDXExporter
@@ -66,34 +62,45 @@ __VERSIONS_PER_FILE_FORMAT = {}
 if HAS_CYCLONE_DX_EXPORT:
     __all__.append(CycloneDXExporter.__name__)
     __FORMATS[CycloneDXExporter.FORMAT_NAME] = CycloneDXExporter
-    __VERSIONS_PER_FILE_FORMAT[
-        CycloneDXExporter.FORMAT_NAME
-    ] = CycloneDXExporter.SUPPORTED_VERSIONS
+    __VERSIONS_PER_FILE_FORMAT[CycloneDXExporter.FORMAT_NAME] = (
+        CycloneDXExporter.SUPPORTED_VERSIONS
+    )
 
 if HAS_SPDX_EXPORT:
     __all__.append(SpdxExporter.__name__)
     __FORMATS[SpdxExporter.FORMAT_NAME] = SpdxExporter
-    __VERSIONS_PER_FILE_FORMAT[
-        SpdxExporter.FORMAT_NAME
-    ] = SpdxExporter.SUPPORTED_VERSIONS
+    __VERSIONS_PER_FILE_FORMAT[SpdxExporter.FORMAT_NAME] = (
+        SpdxExporter.SUPPORTED_VERSIONS
+    )
 
 if HAS_SPDX3_EXPORT:
     __all__.append(Spdx3Exporter.__name__)
     __FORMATS[Spdx3Exporter.FORMAT_NAME] = Spdx3Exporter
-    __VERSIONS_PER_FILE_FORMAT[
-        Spdx3Exporter.FORMAT_NAME
-    ] = Spdx3Exporter.SUPPORTED_VERSIONS
+    __VERSIONS_PER_FILE_FORMAT[Spdx3Exporter.FORMAT_NAME] = (
+        Spdx3Exporter.SUPPORTED_VERSIONS
+    )
 
 if HAS_BUILD_INFO_EXPORT:
     __all__.append(BuildInfoExporter.__name__)
     __FORMATS[BuildInfoExporter.FORMAT_NAME] = BuildInfoExporter
 
-_exporter_description = namedtuple("ExporterDescription",
-                                   ["name", "description", "formats",
-                                    "versions", "default_format", "default_version", "short_format_code"])
+_exporter_description = namedtuple(
+    "ExporterDescription",
+    [
+        "name",
+        "description",
+        "formats",
+        "versions",
+        "default_format",
+        "default_version",
+        "short_format_code",
+    ],
+)
 
 
-def get_exporter(file_format: str, graph: _Graph, *tools: _ToolInfo) -> ExporterBase:
+def get_exporter(
+    file_format: str, graph: _Graph, *tools: _ToolInfo
+) -> ExporterBase:
     if file_format not in __FORMATS:
         raise KeyError(file_format)
 
@@ -106,10 +113,23 @@ def get_exporters() -> Sequence[_exporter_description]:
         _exporter_description(
             f.FORMAT_NAME,
             f.FORMAT_DESCRIPTION,
-            f.SUPPORTED_FILE_FORMATS if isinstance(f, SupportsFileFormat) else frozenset(),
-            f.SUPPORTED_VERSIONS if isinstance(f, SupportsFileVersion) else frozenset(),
+            (
+                f.SUPPORTED_FILE_FORMATS
+                if isinstance(f, SupportsFileFormat)
+                else frozenset()
+            ),
+            (
+                f.SUPPORTED_VERSIONS
+                if isinstance(f, SupportsFileVersion)
+                else frozenset()
+            ),
             f.DEFAULT_FILE_FORMAT if isinstance(f, SupportsFileFormat) else "",
-            f.DEFAULT_FILE_VERSION if isinstance(f, SupportsFileVersion) else "",
-            f.SHORT_FORMAT_CODE)
+            (
+                f.DEFAULT_FILE_VERSION
+                if isinstance(f, SupportsFileVersion)
+                else ""
+            ),
+            f.SHORT_FORMAT_CODE,
+        )
         for f in __FORMATS.values()
     ]

@@ -1,44 +1,58 @@
 #
 # SPDX-License-Identifier: MIT
 #
-# Copyright (c) 2022-2023 Carsten Igel.
+# Copyright (c) 2021-2024 Carsten Igel.
 #
-# This file is part of pdm-sbom
+# This file is part of pdm-bump
 # (see https://github.com/carstencodes/pdm-sbom).
 #
 # This file is published using the MIT license.
 # Refer to LICENSE for more information
 #
 from collections.abc import Sequence
-from typing import IO, AnyStr, Iterable, Mapping, cast, Optional, ClassVar, Union, Final
-from uuid import UUID, uuid5, NAMESPACE_URL
+from datetime import datetime
+from typing import (
+    IO,
+    AnyStr,
+    ClassVar,
+    Final,
+    Iterable,
+    Mapping,
+    Optional,
+    Union,
+    cast,
+)
+from uuid import NAMESPACE_URL, UUID, uuid5
 
-from cyclonedx.model import (  # type: ignore
+from cyclonedx.model import ExternalReference  # type: ignore
+from cyclonedx.model import (
+    ExternalReferenceType,
+    HashType,
     OrganizationalContact,
     OrganizationalEntity,
-    Tool, ExternalReference, ExternalReferenceType, XsUri, HashType,
+    Tool,
+    XsUri,
 )
 from cyclonedx.model.bom import Bom, BomMetaData
 from cyclonedx.model.bom_ref import BomRef
-from cyclonedx.model.component import (
-    Component,
-    ComponentScope,
-    ComponentType,
-)
+from cyclonedx.model.component import Component, ComponentScope, ComponentType
 from cyclonedx.model.dependency import Dependency
-from cyclonedx.model.license import LicenseExpression, DisjunctiveLicense
-from cyclonedx.output import (
-    OutputFormat,
-    SchemaVersion,
-)
+from cyclonedx.model.license import DisjunctiveLicense, LicenseExpression
+from cyclonedx.output import OutputFormat, SchemaVersion
 from cyclonedx.output import make_outputter as get_output_instance
 from packageurl import PackageURL
 
-from .base import ExporterBase, FormatAndVersionMixin, ToolInfo
-from ..dag import UsageKind, Graph
-from ..project import ProjectInfo, AuthorInfo, ComponentInfo, LicenseInfo, create_self_info, create_pdm_info
+from ..dag import Graph, UsageKind
+from ..project import (
+    AuthorInfo,
+    ComponentInfo,
+    LicenseInfo,
+    ProjectInfo,
+    create_pdm_info,
+    create_self_info,
+)
 from ..project.tools import create_module_info
-from datetime import datetime
+from .base import ExporterBase, FormatAndVersionMixin, ToolInfo
 
 
 class CycloneDXExporter(ExporterBase, FormatAndVersionMixin):
@@ -61,9 +75,11 @@ class CycloneDXExporter(ExporterBase, FormatAndVersionMixin):
     DEFAULT_FILE_VERSION: Final[str] = "1.5"
     FORMAT_NAME: str = "cyclonedx"
     SHORT_FORMAT_CODE: str = "c"
-    FORMAT_DESCRIPTION = f"CycloneDX file format - "\
-                         f"supported versions: {', '.join(SUPPORTED_VERSIONS)} - "\
-                         f"supported formats: {', '.join(SUPPORTED_FILE_FORMATS)}"
+    FORMAT_DESCRIPTION = (
+        f"CycloneDX file format - "
+        f"supported versions: {', '.join(SUPPORTED_VERSIONS)} - "
+        f"supported formats: {', '.join(SUPPORTED_FILE_FORMATS)}"
+    )
 
     def __init__(self, project, *tools: ToolInfo) -> None:
         ExporterBase.__init__(self, project, *tools)
@@ -89,18 +105,20 @@ class CycloneDXExporter(ExporterBase, FormatAndVersionMixin):
         data: str = output.output_as_string()
         data_to_write: AnyStr = cast(AnyStr, data)
         if "b" in stream.mode:
-            data_to_write = cast(AnyStr, self._to_bytes(cast(str, data_to_write)))
+            data_to_write = cast(
+                AnyStr, self._to_bytes(cast(str, data_to_write))
+            )
         stream.write(data_to_write)
 
 
 class _PdmBuilder:
     scopes: ClassVar[dict[UsageKind, Optional[ComponentScope]]] = {
-            UsageKind.ROOT: None,
-            UsageKind.REQUIRED: ComponentScope.REQUIRED,
-            UsageKind.OPTIONAL: ComponentScope.OPTIONAL,
-            UsageKind.DEVELOPMENT: ComponentScope.EXCLUDED,
-            UsageKind.UNUSED: ComponentScope.EXCLUDED,
-        }
+        UsageKind.ROOT: None,
+        UsageKind.REQUIRED: ComponentScope.REQUIRED,
+        UsageKind.OPTIONAL: ComponentScope.OPTIONAL,
+        UsageKind.DEVELOPMENT: ComponentScope.EXCLUDED,
+        UsageKind.UNUSED: ComponentScope.EXCLUDED,
+    }
 
     def __init__(self, graph: Graph) -> None:
         self.__project: ProjectInfo = graph.root_node.project
@@ -115,15 +133,17 @@ class _PdmBuilder:
             version=1,
             metadata=self.__get_metadata(),
             dependencies=self.__get_dependencies(),
-            vulnerabilities=()
+            vulnerabilities=(),
         )
 
     @staticmethod
     def authors_to_oc(
-        authors: Sequence[AuthorInfo]
+        authors: Sequence[AuthorInfo],
     ) -> Iterable[OrganizationalContact]:
         for author in authors:
-            yield OrganizationalContact(name=author.name, email=author.email, phone=None)
+            yield OrganizationalContact(
+                name=author.name, email=author.email, phone=None
+            )
 
     @staticmethod
     def project_to_oe(project: ProjectInfo) -> OrganizationalEntity:
@@ -135,13 +155,15 @@ class _PdmBuilder:
 
     @staticmethod
     def license_to_license_choice(
-        _: LicenseInfo
+        _: LicenseInfo,
     ) -> Iterable[Union[LicenseExpression, DisjunctiveLicense]]:
         return ()
 
     @staticmethod
     def component_to_cyclonedx(
-        component: ComponentInfo, scope: Optional[ComponentScope] = None, group: Optional[str] = None
+        component: ComponentInfo,
+        scope: Optional[ComponentScope] = None,
+        group: Optional[str] = None,
     ) -> Component:
         purl: PackageURL = component.get_package_url()
 
@@ -152,7 +174,9 @@ class _PdmBuilder:
             licenses=_PdmBuilder.license_to_license_choice(component.license),
             mime_type=None,
             purl=purl,
-            version=str(component.resolved_version) if component.resolved else None,
+            version=(
+                str(component.resolved_version) if component.resolved else None
+            ),
             scope=scope,
             supplier=None,  # TODO
             author=None,  # TODO
@@ -160,7 +184,9 @@ class _PdmBuilder:
             group=group,
             hashes=(),
             copyright=None,  # TODO
-            external_references=_PdmBuilder.__get_external_references_for(component),
+            external_references=_PdmBuilder.__get_external_references_for(
+                component
+            ),
             properties=(),
             release_notes=None,
             cpe=None,
@@ -179,15 +205,17 @@ class _PdmBuilder:
         return BomRef(value=purl.to_string())
 
     @staticmethod
-    def __get_external_references_for(component: ComponentInfo) -> Iterable[ExternalReference]:
+    def __get_external_references_for(
+        component: ComponentInfo,
+    ) -> Iterable[ExternalReference]:
         for file in component.files:
             yield ExternalReference(
                 comment=None,
                 type=ExternalReferenceType.DISTRIBUTION,
-                url=XsUri(f"cyclonedx-files://{component.name}/files{file.file}"),
-                hashes=(
-                    HashType.from_composite_str(file.hash),
-                )
+                url=XsUri(
+                    f"cyclonedx-files://{component.name}/files{file.file}"
+                ),
+                hashes=(HashType.from_composite_str(file.hash),),
             )
 
     @staticmethod
@@ -201,7 +229,9 @@ class _PdmBuilder:
 
     def __get_metadata(self) -> BomMetaData:
         return BomMetaData(
-            component=_PdmBuilder.component_to_cyclonedx(self.__project, None, None),
+            component=_PdmBuilder.component_to_cyclonedx(
+                self.__project, None, None
+            ),
             tools=_PdmBuilder.__get_tools(
                 create_self_info(),
                 create_pdm_info(),
@@ -213,19 +243,27 @@ class _PdmBuilder:
             supplier=None,
             licenses=None,  # TODO
             properties=(),
-            timestamp=datetime.utcnow()
+            timestamp=datetime.utcnow(),
         )
 
     def __get_serial_number(self) -> UUID:
-        return uuid5(NAMESPACE_URL, f"cyclonedx://{self.__project.name}/{self.__project.resolved_version}")
+        return uuid5(
+            NAMESPACE_URL,
+            f"cyclonedx://{self.__project.name}/"
+            f"{self.__project.resolved_version}",
+        )
 
     def __build_components(self) -> Iterable[Component]:
         yield _PdmBuilder.component_to_cyclonedx(self.__project, None, None)
         for node in self.__graph.nodes:
             if node == self.__graph.root_node:
                 continue
-            cs: Optional[ComponentScope] = _PdmBuilder.scopes.get(node.usage, None)
-            yield _PdmBuilder.component_to_cyclonedx(node.component, cs, node.group)
+            cs: Optional[ComponentScope] = _PdmBuilder.scopes.get(
+                node.usage, None
+            )
+            yield _PdmBuilder.component_to_cyclonedx(
+                node.component, cs, node.group
+            )
 
     def __get_external_references(self) -> Iterable[ExternalReference]:
         return _PdmBuilder.__get_external_references_for(self.__project)
@@ -234,13 +272,19 @@ class _PdmBuilder:
         for node in self.__graph.nodes:
             yield Dependency(
                 ref=_PdmBuilder.__component_to_bom_ref(node.component),
-                dependencies=_PdmBuilder.__get_dependencies_for(node.component)
+                dependencies=_PdmBuilder.__get_dependencies_for(
+                    node.component
+                ),
             )
 
     @staticmethod
-    def __get_dependencies_for(component: ComponentInfo) -> Iterable[Dependency]:
+    def __get_dependencies_for(
+        component: ComponentInfo,
+    ) -> Iterable[Dependency]:
         for _, dependency in component.all_dependencies():
             yield Dependency(
                 ref=_PdmBuilder.__component_to_bom_ref(dependency.component),
-                dependencies=_PdmBuilder.__get_dependencies_for(dependency.component)
+                dependencies=_PdmBuilder.__get_dependencies_for(
+                    dependency.component
+                ),
             )

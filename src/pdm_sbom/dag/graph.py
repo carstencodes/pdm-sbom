@@ -1,10 +1,20 @@
+#
+# SPDX-License-Identifier: MIT
+#
+# Copyright (c) 2021-2024 Carsten Igel.
+#
+# This file is part of pdm-bump
+# (see https://github.com/carstencodes/pdm-sbom).
+#
+# This file is published using the MIT license.
+# Refer to LICENSE for more information
+#
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Sequence, Mapping, Iterable
+from collections.abc import Iterable, Iterator, Mapping, Sequence
+from enum import IntEnum
 from typing import Optional
 
 from pdm_sbom.project import ComponentInfo, ProjectInfo
-
-from enum import IntEnum
 
 
 class UsageKind(IntEnum):
@@ -37,7 +47,9 @@ class Node(ABC):
 
 
 class ComponentNode(Node):
-    def __init__(self, component: ComponentInfo, group: Optional[str] = None) -> None:
+    def __init__(
+        self, component: ComponentInfo, group: Optional[str] = None
+    ) -> None:
         self.__component = component
         self.__paint = UsageKind.UNUSED
         self.__group = group
@@ -136,18 +148,26 @@ class Graph:
                     yield node, target
 
     def __repr__(self) -> str:
-        return "<Graph <Nodes {}> <Edges {}>>".format(self.__nodes, self.__edges)
+        return "<Graph <Nodes {}> <Edges {}>>".format(
+            self.__nodes, self.__edges
+        )
 
     def __str__(self) -> str:
-        max_node_len: int = max(map(lambda n: len(n.component.name), self.__nodes))
+        max_node_len: int = max(
+            map(lambda n: len(n.component.name), self.__nodes)
+        )
         lines: list[str] = []
         for node in self.__nodes:
             line = "{node:{width}} [{paint}] -> ".format(
-                node=node.component.name, paint=node.usage.name, width=max_node_len)
+                node=node.component.name,
+                paint=node.usage.name,
+                width=max_node_len,
+            )
             if node in self.__edges:
                 for target in self.__edges[node]:
                     line += "{node:}[{paint}],".format(
-                        node=target.component.name, paint=target.usage.name)
+                        node=target.component.name, paint=target.usage.name
+                    )
 
             line = line.rstrip(",")
             lines.append(line)
