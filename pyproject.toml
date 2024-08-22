@@ -51,7 +51,14 @@ requires = [
     "pdm-backend",
 ]
 build-backend = "pdm.backend"
+
 [tool.pdm]
+plugins = [
+    "-e file:///${PROJECT_ROOT}",
+    "pdm-bump",
+    "pdm-audit",
+]
+
 [tool.pdm.dev-dependencies]
 test = [
     "pytest>=7.1.2",
