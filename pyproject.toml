@@ -1,6 +1,6 @@
 [project]
 name = "pdm-sbom"
-version = "0.9.0.post1"
+version = "0.9.1"
 description = "Generate Software Bill of Materials from PDM based projects"
 authors = [
     { name = "Carsten Igel", email = "cig@bite-that-bit.de" },
@@ -113,7 +113,6 @@ copyright-headers = "licenseheaders -y 2021-2024 -o 'Carsten Igel' -n pdm-bump -
 composite = [
     "editorconfig",
     "flake",
-#    "pylint",
     "mypy",
 ]
 
@@ -223,4 +222,3 @@ sort_commits = "oldest"
 [[tool.git-cliff.git.commit_preprocessors]]
 pattern = "\\((\\w+\\s)?#([0-9]+)\\)"
 replace = "([#${2}](https://github.com/orhun/git-cliff/issues/${2}))"
-
