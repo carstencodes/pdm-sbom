@@ -205,10 +205,12 @@ class ComponentBuilder:
                 continue
             package_name: str = dependency.name
             if package_name not in package_map:
-                raise DependencyTreeError(
-                    f"Could not find package {package_name} derived "
-                    f"from {dependency.name} in package map."
+                logger.error(
+                    ("Could not find package %s derived "
+                    "from %s in package map."),
+                    package_name, dependency.name,
                 )
+                continue
 
             package = package_map[package_name]
             logger.debug(
